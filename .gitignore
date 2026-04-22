@@ -1,0 +1,17 @@
+master.key
+node_modules/
+dist/
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+*.log
+.idea/
+.vscode/
+coverage/
+.cache/
+tokens.enc
+tokens.enc

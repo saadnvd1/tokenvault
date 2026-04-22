@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+BIN_DIR="$HOME/bin"
+mkdir -p "$BIN_DIR"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cat > "$BIN_DIR/tv" << EOF
+#!/bin/bash
+exec python3 "$SCRIPT_DIR/tokenvault.py" "\$@"
+EOF
+chmod +x "$BIN_DIR/tv"
+echo "Installed: tv → $BIN_DIR/tv"
+echo "Make sure $BIN_DIR is in your PATH"
