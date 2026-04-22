@@ -2,6 +2,12 @@
 
 > Encrypted token store for developers. Single file, zero dependencies, git-synced.
 
+<p align="center">
+	<br>
+	<img src="media/demo.png" width="600">
+	<br>
+</p>
+
 Manage your API tokens and secrets from the terminal. AES-256 encrypted, stored in a git repo, decrypted with a local master key. Push `tokens.enc` anywhere — without the key, it's unreadable.
 
 Single Python file. No pip install. No virtual env. Just works.
@@ -21,7 +27,7 @@ tv init
 ## Usage
 
 ```sh
-tv add stripe sk_live_abc123 "secret key (prod)"
+tv add stripe sk_live_example123 "secret key (prod)"
 tv add stripe whsec_xyz789 "webhook secret"
 tv get stripe                     # prints all tokens for project
 tv get stripe "secret key (prod)" # prints specific token

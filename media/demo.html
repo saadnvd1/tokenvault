@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1b26;
+    color: #a9b1d6;
+    font-family: "SF Mono", "Menlo", "Monaco", monospace;
+    font-size: 15px;
+    line-height: 1.6;
+    width: 900px;
+    height: 520px;
+    overflow: hidden;
+    padding: 20px;
+  }
+  .window {
+    background: #1a1b26;
+    border-radius: 10px;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #3b4874;
+  }
+  .titlebar {
+    background: #24283b;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-red { background: #f7768e; }
+  .dot-yellow { background: #e0af68; }
+  .dot-green { background: #9ece6a; }
+  .titlebar-text { color: #565f89; font-size: 12px; margin-left: 8px; }
+  .content { padding: 16px 20px; overflow: hidden; flex: 1; }
+  pre { font-family: inherit; font-size: inherit; line-height: inherit; }
+  .prompt { color: #7aa2f7; }
+  .green { color: #9ece6a; }
+  .cyan { color: #7dcfff; }
+  .white { color: #c0caf5; }
+  .dim { color: #565f89; }
+  .yellow { color: #e0af68; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot dot-red"></div>
+    <div class="dot dot-yellow"></div>
+    <div class="dot dot-green"></div>
+    <span class="titlebar-text">~/dev — tokenvault</span>
+  </div>
+  <div class="content">
+    <pre><span class="prompt">❯</span> <span class="white">tv add stripe sk_live_example1234567890 "secret key (prod)"</span>
+<span class="green">Added: stripe (secret key (prod))</span>
+
+<span class="prompt">❯</span> <span class="white">tv add openai sk-example-abc123def456 "api key"</span>
+<span class="green">Added: openai (api key)</span>
+
+<span class="prompt">❯</span> <span class="white">tv list</span>
+  <span class="cyan">github</span> <span class="dim">(2 tokens)</span> <span class="dim">[personal access token, oauth client secret]</span>
+  <span class="cyan">openai</span> <span class="dim">(1 token)</span> <span class="dim">[api key]</span>
+  <span class="cyan">stripe</span> <span class="dim">(4 tokens)</span> <span class="dim">[secret key (prod), secret key (test), webhook secret (prod), webhook secret (dev)]</span>
+  <span class="cyan">supabase</span> <span class="dim">(3 tokens)</span> <span class="dim">[service role key, anon key, jwt secret]</span>
+
+<span class="prompt">❯</span> <span class="white">tv get stripe "secret key (prod)"</span>
+sk_live_example1234567890
+
+<span class="prompt">❯</span> <span class="white">tv get openai</span>
+sk-example-abc123def456</pre>
+  </div>
+</div>
+</body>
+</html>
