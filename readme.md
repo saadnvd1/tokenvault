@@ -8,7 +8,7 @@
 	<br>
 </p>
 
-Manage your API tokens and secrets from the terminal. AES-256 encrypted, stored in a git repo, decrypted with a local master key. Push `tokens.enc` anywhere — without the key, it's unreadable.
+Manage your API tokens and secrets from the terminal. AES-256 encrypted, decrypted with a local master key. Data at `~/.tokenvault/`, key at `~/.config/tokenvault/` — without the key, it's unreadable.
 
 Single JS file. No dependencies. Just Node.js.
 
@@ -46,49 +46,48 @@ tv dump                           # full decrypted JSON
 
 ## How it works
 
-1. `tv init` generates a 256-bit master key at `~/.config/tokenvault/master.key`
+1. `tv init` creates a git repo at `~/.tokenvault/` and generates a master key at `~/.config/tokenvault/master.key`
 2. `tv add` encrypts all tokens with AES-256-CBC (Node crypto) and writes `tokens.enc`
-3. `tokens.enc` is safe to commit and push — it's encrypted
-4. `master.key` stays local, never committed
+3. Every write auto-commits `tokens.enc` to the local git repo
+4. `master.key` stays outside the repo, never committed
 
 That's it. Single JS file, zero deps.
 
 ## Sync across machines
 
 ```sh
-# On the new machine:
-npm i -g tokenvault  # or git clone + npm link
+# First machine — set up remote:
+tv remote https://github.com/you/my-tokens.git  # private repo
+tv push
+
+# Second machine:
+npm i -g tokenvault
+tv init
+tv remote https://github.com/you/my-tokens.git
+tv pull
 
 # Copy the master key from your first machine:
 scp user@first-machine:~/.config/tokenvault/master.key ~/.config/tokenvault/master.key
 chmod 600 ~/.config/tokenvault/master.key
 ```
 
-Now `tv get` works on both machines. Push/pull `tokens.enc` via git to sync.
+Now `tv get` works on both machines. Use `tv push` / `tv pull` to sync.
 
 ## Use with AI coding agents
 
-Point any AI coding agent (Claude Code, Codex, etc.) at the tokenvault directory and it can fetch tokens on its own:
+Tell any AI coding agent (Claude Code, Codex, etc.) to use `tv` and it can fetch tokens on its own:
 
 ```sh
 # In your project's CLAUDE.md or agent instructions:
-# "API keys are stored in ~/dev/tokenvault. Use `tv get <project> [desc]` to fetch tokens."
+# "Use `tv get <project> [desc]` to fetch API keys. Run `tv list` to see what's available."
 ```
 
-Agents can also use `tv dump` for a full JSON view or `tv list` to discover what's available. Output is pipe-safe — colors auto-disable when redirected, so `tv get openai "api key"` returns a clean value for scripts and subshells.
+Output is pipe-safe — colors auto-disable when redirected, so `tv get openai "api key"` returns a clean value for scripts and subshells.
 
 ```sh
 # In a script or .env setup:
 export OPENAI_API_KEY=$(tv get openai "api key")
 export STRIPE_SK=$(tv get stripe "secret key (prod)")
-```
-
-#### Alias in your shell
-
-The installer creates `tv` at `~/bin/tv`. If you prefer a different location:
-
-```sh
-ln -sf /path/to/tokenvault/cli.js /usr/local/bin/tv
 ```
 
 ## FAQ

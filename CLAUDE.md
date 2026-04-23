@@ -25,12 +25,15 @@ Central CLI token store. Encrypted, git-synced. Single JS file, zero deps.
 
 ## Commands
 
-- `tv init` - Generate master key (once per machine)
-- `tv add <project> <token> [desc]` - Add/update token
+- `tv init` - Create vault git repo + generate master key
+- `tv add <project> <token> [desc]` - Add/update token (auto-commits)
 - `tv get <project> [desc]` - Print token value
 - `tv list [project]` - List projects or tokens (masked)
-- `tv remove <project> [desc]` - Remove token(s)
+- `tv remove <project> [desc]` - Remove token(s) (auto-commits)
 - `tv dump` - Print decrypted JSON
+- `tv remote <url>` - Set git remote for syncing
+- `tv push` - Push tokens to remote
+- `tv pull` - Pull tokens from remote
 - `tv key-path` - Print master key location
 
 ## Standards

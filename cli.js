@@ -192,6 +192,49 @@ function save(data) {
   ensureKey();
   const plaintext = Buffer.from(JSON.stringify(data, null, 2));
   fs.writeFileSync(ENC_FILE, encrypt(plaintext));
+  autoCommit();
+}
+
+// ── Git helpers ─────────────────────────────────────────────────────
+
+const { execFileSync } = require("child_process");
+
+function git(...args) {
+  return execFileSync("git", args, { cwd: DATA_DIR, stdio: "pipe" })
+    .toString()
+    .trim();
+}
+
+function gitOk(...args) {
+  try {
+    git(...args);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isGitRepo() {
+  return gitOk("rev-parse", "--git-dir");
+}
+
+function hasRemote() {
+  try {
+    const remotes = git("remote");
+    return remotes.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function autoCommit() {
+  if (!isGitRepo()) return;
+  try {
+    git("add", "tokens.enc");
+    git("commit", "-m", "update tokens");
+  } catch {
+    // nothing to commit
+  }
 }
 
 // ── Commands ────────────────────────────────────────────────────────
@@ -199,6 +242,15 @@ function save(data) {
 function cmdInit() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
+  // init git repo if not already one
+  if (!isGitRepo()) {
+    git("init");
+    // gitignore everything except tokens.enc
+    fs.writeFileSync(path.join(DATA_DIR, ".gitignore"), "*\n!tokens.enc\n!.gitignore\n");
+    git("add", ".gitignore");
+    git("commit", "-m", "init tokenvault");
+    console.log(`${c.bold.green("\u2713")} Initialized vault: ${c.dim(DATA_DIR)}`);
+  }
   if (fs.existsSync(KEY_FILE)) {
     console.log(`${c.yellow("!")} Master key already exists: ${c.dim(KEY_FILE)}`);
     return;
@@ -330,6 +382,49 @@ function cmdDump() {
   }
 }
 
+function cmdRemote(args) {
+  if (!isGitRepo()) die(`Not a git repo. Run ${ce.yellow("tv init")} first.`);
+  if (!args.length) {
+    if (!hasRemote()) {
+      console.log(c.dim("No remote set."));
+      console.log(`  ${c.dim("Run:")} ${c.cyan("tv remote <url>")}`);
+    } else {
+      console.log(git("remote", "-v"));
+    }
+    return;
+  }
+  const url = args[0];
+  if (hasRemote()) {
+    git("remote", "set-url", "origin", url);
+  } else {
+    git("remote", "add", "origin", url);
+  }
+  console.log(`${c.bold.green("\u2713")} Remote set: ${c.dim(url)}`);
+}
+
+function cmdPush() {
+  if (!isGitRepo()) die(`Not a git repo. Run ${ce.yellow("tv init")} first.`);
+  if (!hasRemote()) die(`No remote set. Run ${ce.yellow("tv remote <url>")} first.`);
+  try {
+    // set upstream on first push
+    git("push", "-u", "origin", "HEAD");
+    console.log(`${c.bold.green("\u2713")} Pushed tokens`);
+  } catch (e) {
+    die(`Push failed: ${e.stderr?.toString().trim() || e.message}`);
+  }
+}
+
+function cmdPull() {
+  if (!isGitRepo()) die(`Not a git repo. Run ${ce.yellow("tv init")} first.`);
+  if (!hasRemote()) die(`No remote set. Run ${ce.yellow("tv remote <url>")} first.`);
+  try {
+    git("pull", "--rebase", "origin", "HEAD");
+    console.log(`${c.bold.green("\u2713")} Pulled tokens`);
+  } catch (e) {
+    die(`Pull failed: ${e.stderr?.toString().trim() || e.message}`);
+  }
+}
+
 function cmdKeyPath() {
   console.log(KEY_FILE);
 }
@@ -351,11 +446,16 @@ ${c.bold("Retrieve")}
   ${c.cyan("tv list")} ${c.dim("<project>")}                 Tokens for a project (masked)
   ${c.cyan("tv dump")}                          Print all decrypted JSON
 
+${c.bold("Sync")}
+  ${c.cyan("tv remote")} ${c.dim("<url>")}                  Set git remote for syncing
+  ${c.cyan("tv push")}                          Push tokens to remote
+  ${c.cyan("tv pull")}                          Pull tokens from remote
+
 ${c.bold("Info")}
   ${c.cyan("tv key-path")}                      Print master key location
 
 ${c.dim("Aliases: ls=list, rm=remove")}
-${c.dim("Encrypted with AES-256-CBC. Master key at ~/.config/tokenvault/master.key")}`;
+${c.dim("Data: ~/.tokenvault/ | Key: ~/.config/tokenvault/master.key")}`;
 
 // ── Main ────────────────────────────────────────────────────────────
 
@@ -371,6 +471,9 @@ const cli = router({
     remove: cmdRemove,
     rm: cmdRemove,
     dump: cmdDump,
+    remote: cmdRemote,
+    push: cmdPush,
+    pull: cmdPull,
     "key-path": cmdKeyPath,
   },
 });
