@@ -8,10 +8,10 @@ const os = require("os");
 
 // ── Paths ───────────────────────────────────────────────────────────
 
+const DATA_DIR = process.env.TOKENVAULT_DIR || path.join(os.homedir(), ".tokenvault");
 const KEY_DIR = path.join(os.homedir(), ".config", "tokenvault");
 const KEY_FILE = path.join(KEY_DIR, "master.key");
-const REPO_DIR = path.resolve(__dirname);
-const ENC_FILE = path.join(REPO_DIR, "tokens.enc");
+const ENC_FILE = path.join(DATA_DIR, "tokens.enc");
 
 // ── Colors (extractable: mini-ansi) ─────────────────────────────────
 //
@@ -197,6 +197,7 @@ function save(data) {
 // ── Commands ────────────────────────────────────────────────────────
 
 function cmdInit() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
   if (fs.existsSync(KEY_FILE)) {
     console.log(`${c.yellow("!")} Master key already exists: ${c.dim(KEY_FILE)}`);

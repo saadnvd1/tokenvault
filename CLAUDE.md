@@ -7,8 +7,9 @@ Central CLI token store. Encrypted, git-synced. Single JS file, zero deps.
 - `cli.js` - Single file, Node.js built-in crypto
 - `package.json` - npm global install (`npm i -g tokenvault`)
 - `install.sh` - Alternative: creates `~/bin/tv` wrapper
-- `tokens.enc` - AES-256-CBC encrypted, committed to git
+- `~/.tokenvault/tokens.enc` - AES-256-CBC encrypted data (default path)
 - `~/.config/tokenvault/master.key` - Decryption key, never committed
+- `TOKENVAULT_DIR` env var - Override data directory (default: `~/.tokenvault`)
 - `tokenvault.py` - Legacy Python version (deprecated, kept for reference)
 
 ## Data Format (decrypted)
