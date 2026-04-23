@@ -45,7 +45,7 @@ tv dump                           # full decrypted JSON
 3. `tokens.enc` is safe to commit and push — it's encrypted
 4. `master.key` stays local, never committed
 
-That's it. ~220 lines of Python, stdlib only.
+That's it. Single Python file, stdlib only.
 
 ## Sync across machines
 
@@ -60,13 +60,21 @@ chmod 600 ~/.config/tokenvault/master.key
 
 Now `tv get` works on both machines. Push/pull `tokens.enc` via git to sync.
 
-## Tips
+## Use with AI coding agents
 
-#### Use with AI coding tools
+Point any AI coding agent (Claude Code, Codex, etc.) at the tokenvault directory and it can fetch tokens on its own:
 
 ```sh
-tv dump  # outputs all tokens as JSON — paste into Claude, Copilot, etc.
-tv get openai "api key"  # grab a specific key for a script
+# In your project's CLAUDE.md or agent instructions:
+# "API keys are stored in ~/dev/tokenvault. Use `tv get <project> [desc]` to fetch tokens."
+```
+
+Agents can also use `tv dump` for a full JSON view or `tv list` to discover what's available. Output is pipe-safe — colors auto-disable when redirected, so `tv get openai "api key"` returns a clean value for scripts and subshells.
+
+```sh
+# In a script or .env setup:
+export OPENAI_API_KEY=$(tv get openai "api key")
+export STRIPE_SK=$(tv get stripe "secret key (prod)")
 ```
 
 #### Alias in your shell
