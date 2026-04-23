@@ -1,13 +1,15 @@
 # tokenvault
 
-Central CLI token store. Encrypted, git-synced. Single-file Python, zero deps.
+Central CLI token store. Encrypted, git-synced. Single JS file, zero deps.
 
 ## Architecture
 
-- `tokenvault.py` - Single file, stdlib + openssl CLI
-- `install.sh` - Creates `~/bin/tv` wrapper
+- `cli.js` - Single file, Node.js built-in crypto
+- `package.json` - npm global install (`npm i -g tokenvault`)
+- `install.sh` - Alternative: creates `~/bin/tv` wrapper
 - `tokens.enc` - AES-256-CBC encrypted, committed to git
 - `~/.config/tokenvault/master.key` - Decryption key, never committed
+- `tokenvault.py` - Legacy Python version (deprecated, kept for reference)
 
 ## Data Format (decrypted)
 
@@ -33,5 +35,5 @@ Central CLI token store. Encrypted, git-synced. Single-file Python, zero deps.
 ## Standards
 
 - Conventional commits
-- Single file, stdlib only, no external deps
-- Encryption via openssl subprocess
+- Single file, zero external deps
+- Encryption via Node.js crypto (AES-256-CBC + PBKDF2, openssl-compatible)

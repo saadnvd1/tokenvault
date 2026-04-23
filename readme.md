@@ -10,12 +10,18 @@
 
 Manage your API tokens and secrets from the terminal. AES-256 encrypted, stored in a git repo, decrypted with a local master key. Push `tokens.enc` anywhere — without the key, it's unreadable.
 
-Single Python file. No pip install. No virtual env. Just works.
+Single JS file. No dependencies. Just Node.js.
 
 ## Install
 
 ```sh
-git clone https://github.com/saadnvd1/tokenvault && cd tokenvault && bash install.sh
+npm i -g tokenvault
+```
+
+Or clone and link:
+
+```sh
+git clone https://github.com/saadnvd1/tokenvault && cd tokenvault && npm link
 ```
 
 Then generate your master key:
@@ -41,17 +47,17 @@ tv dump                           # full decrypted JSON
 ## How it works
 
 1. `tv init` generates a 256-bit master key at `~/.config/tokenvault/master.key`
-2. `tv add` encrypts all tokens with AES-256-CBC via openssl and writes `tokens.enc`
+2. `tv add` encrypts all tokens with AES-256-CBC (Node crypto) and writes `tokens.enc`
 3. `tokens.enc` is safe to commit and push — it's encrypted
 4. `master.key` stays local, never committed
 
-That's it. Single Python file, stdlib only.
+That's it. Single JS file, zero deps.
 
 ## Sync across machines
 
 ```sh
 # On the new machine:
-git clone https://github.com/saadnvd1/tokenvault && cd tokenvault && bash install.sh
+npm i -g tokenvault  # or git clone + npm link
 
 # Copy the master key from your first machine:
 scp user@first-machine:~/.config/tokenvault/master.key ~/.config/tokenvault/master.key
@@ -82,14 +88,14 @@ export STRIPE_SK=$(tv get stripe "secret key (prod)")
 The installer creates `tv` at `~/bin/tv`. If you prefer a different location:
 
 ```sh
-ln -sf /path/to/tokenvault/tokenvault.py /usr/local/bin/tv
+ln -sf /path/to/tokenvault/cli.js /usr/local/bin/tv
 ```
 
 ## FAQ
 
 #### Is this secure?
 
-Tokens are encrypted with AES-256-CBC + PBKDF2 via openssl. The encrypted file is safe to push to GitHub. Security depends on your master key staying private — treat it like an SSH key.
+Tokens are encrypted with AES-256-CBC + PBKDF2 via Node's built-in crypto module. The encrypted file is safe to push to GitHub. Security depends on your master key staying private — treat it like an SSH key.
 
 #### Why not use a password manager?
 
@@ -101,7 +107,7 @@ Env vars work for one machine. tokenvault works across machines via git sync. It
 
 #### Does it work on Linux?
 
-Yes. Requires Python 3 and openssl (both pre-installed on most Linux distros).
+Yes. Requires Node.js 16+ (uses built-in crypto, no native deps).
 
 ## Related
 

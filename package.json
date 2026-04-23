@@ -1,0 +1,24 @@
+{
+  "name": "tokenvault",
+  "version": "1.0.0",
+  "description": "Encrypted CLI token store. Zero deps, git-synced.",
+  "bin": {
+    "tv": "./cli.js"
+  },
+  "files": [
+    "cli.js"
+  ],
+  "keywords": [
+    "token",
+    "secret",
+    "vault",
+    "encrypted",
+    "cli",
+    "api-keys"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saadnvd1/tokenvault"
+  }
+}
