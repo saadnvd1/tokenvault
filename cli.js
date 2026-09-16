@@ -258,8 +258,17 @@ function audit(cmd, fields) {
   }
 }
 
+// Some descriptions in real vaults are themselves secrets (a pasted key, a
+// token used as a label), so only a short label-like description is logged as
+// written; anything else becomes a stable hash that still groups repeat reads.
+function looksLikeLabel(s) {
+  return s.length <= 48 && !/BEGIN|[A-Za-z0-9+/=_\-.]{24,}/.test(s);
+}
+
 function entryName(project, desc) {
-  return desc ? `${project}/${desc}` : project;
+  if (!desc) return project;
+  const safe = looksLikeLabel(desc) ? desc : "#" + crypto.createHash("sha256").update(desc).digest("hex").slice(0, 8);
+  return `${project}/${safe}`;
 }
 
 function readAudit(file = AUDIT_LOG) {

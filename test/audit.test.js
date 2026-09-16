@@ -69,6 +69,22 @@ test("a missing entry is logged as found:false", () => {
   assert.deepStrictEqual(rs.map((r) => [r.entries[0], r.found]), [["nope", false], ["stripe/nope", false]]);
 });
 
+test("a secret-shaped description is logged as a hash, not as written", () => {
+  const { tv, log } = sandbox();
+  const keyDesc = "-----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC1rZXktdjEAAAAABG5vbmU";
+  const tokenDesc = "ghp_abcdefghijklmnopqrstuvwxyz0123";
+  tv(["add", "github", SECRET, keyDesc]);
+  tv(["add", "github", "other", tokenDesc]);
+  tv(["get", "github"]);
+  tv(["get", "github", tokenDesc]);
+  const raw = log();
+  assert.ok(!raw.includes("OPENSSH") && !raw.includes("b3BlbnNzaC1rZXkt"), "key-shaped description written to audit log");
+  assert.ok(!raw.includes(tokenDesc), "token-shaped description written to audit log");
+  const [all, one] = raw.trim().split("\n").map((l) => JSON.parse(l));
+  for (const e of [...all.entries, ...one.entries]) assert.match(e, /^github\/#[0-9a-f]{8}$/);
+  assert.ok(all.entries.includes(one.entries[0]), "hash is stable across reads");
+});
+
 test("claude_session is null outside Claude Code", () => {
   const { tv, log } = sandbox();
   tv(["add", "a", SECRET]);
