@@ -15,3 +15,6 @@ coverage/
 .cache/
 tokens.enc
 tokens.enc
+
+# audit log / checker state, if ever pointed inside the repo
+audit.log*
