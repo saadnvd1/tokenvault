@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFileSync } = require("child_process");
 
 // ── Paths ───────────────────────────────────────────────────────────
 
@@ -195,9 +196,178 @@ function save(data) {
   autoCommit();
 }
 
-// ── Git helpers ─────────────────────────────────────────────────────
 
-const { execFileSync } = require("child_process");
+
+// ── Audit log ───────────────────────────────────────────────────────
+//
+// Every read of a secret (`tv get`, `tv dump`) appends one JSON line: when,
+// which entry, and who asked. NEVER the value. The log lives outside DATA_DIR
+// because DATA_DIR is a git repo that syncs to a remote. Logging is
+// best-effort: a failure here must never stop `tv get` from printing.
+
+const STATE_HOME = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
+const AUDIT_LOG = process.env.TOKENVAULT_AUDIT_LOG || path.join(STATE_HOME, "tokenvault", "audit.log");
+const AUDIT_STATE = `${AUDIT_LOG}.state.json`;
+
+// Executable names only, walking up from our parent: "zsh < claude < tmux".
+// Full command lines are not logged — a parent's argv can hold another secret.
+function processAncestry(startPid, depth = 4) {
+  try {
+    const table = new Map();
+    const out = execFileSync("ps", ["-A", "-o", "pid=,ppid=,comm="], {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 1000,
+    }).toString();
+    for (const line of out.split("\n")) {
+      const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (m) table.set(Number(m[1]), { ppid: Number(m[2]), comm: path.basename(m[3]) });
+    }
+    const chain = [];
+    let pid = startPid;
+    while (pid > 1 && chain.length < depth && table.has(pid)) {
+      chain.push(table.get(pid).comm);
+      pid = table.get(pid).ppid;
+    }
+    return chain;
+  } catch {
+    return [];
+  }
+}
+
+function auditRecord(cmd, fields) {
+  const env = process.env;
+  return {
+    ts: new Date().toISOString(),
+    cmd,
+    ...fields,
+    pid: process.pid,
+    ppid: process.ppid,
+    parents: processAncestry(process.ppid),
+    cwd: process.cwd(),
+    claude_session: env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID || null,
+    agent: env.WIRE_AGENT || null,
+  };
+}
+
+function audit(cmd, fields) {
+  try {
+    fs.mkdirSync(path.dirname(AUDIT_LOG), { recursive: true, mode: 0o700 });
+    fs.appendFileSync(AUDIT_LOG, JSON.stringify(auditRecord(cmd, fields)) + "\n", { mode: 0o600 });
+  } catch {
+    // best-effort: never break the read
+  }
+}
+
+// Some descriptions in real vaults are themselves secrets (a pasted key, a
+// token used as a label), so only a short label-like description is logged as
+// written; anything else becomes a stable hash that still groups repeat reads.
+function looksLikeLabel(s) {
+  return s.length <= 48 && !/BEGIN|[A-Za-z0-9+/=_\-.]{24,}/.test(s);
+}
+
+function entryName(project, desc) {
+  if (!desc) return project;
+  const safe = looksLikeLabel(desc) ? desc : "#" + crypto.createHash("sha256").update(desc).digest("hex").slice(0, 8);
+  return `${project}/${safe}`;
+}
+
+function readAudit(file = AUDIT_LOG) {
+  let raw;
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const records = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      records.push(JSON.parse(line));
+    } catch {
+      // a torn line from a concurrent append; skip it
+    }
+  }
+  return records;
+}
+
+function who(r) {
+  const bits = [];
+  if (r.agent) bits.push(r.agent);
+  if (r.claude_session) bits.push(`session ${r.claude_session.slice(0, 8)}`);
+  bits.push(`pid ${r.pid}`);
+  if (r.parents && r.parents.length) bits.push(r.parents.join("<"));
+  bits.push(r.cwd);
+  return bits.join(", ");
+}
+
+// Pure: records in, findings out. A finding is only reported when the record
+// that triggers it is newer than `since`, so a cron run never repeats one.
+//   - any dump
+//   - more than `maxDistinct` distinct entries read inside `windowSec`
+//   - `maxMisses` or more reads of entries that do not exist inside `windowSec`
+function findAnomalies(records, { since = null, windowSec = 60, maxDistinct = 5, maxMisses = 3 } = {}) {
+  const sinceMs = since ? Date.parse(since) : -Infinity;
+  const rs = records
+    .filter((r) => r && r.ts && !Number.isNaN(Date.parse(r.ts)))
+    .map((r) => ({ ...r, t: Date.parse(r.ts) }))
+    // anything older than one window before the cursor cannot trigger a new finding
+    .filter((r) => r.t > sinceMs - windowSec * 1000)
+    .sort((a, b) => a.t - b.t);
+  const findings = [];
+  const winMs = windowSec * 1000;
+
+  for (const r of rs) {
+    if (r.cmd === "dump" && r.t > sinceMs)
+      findings.push({ kind: "dump", ts: r.ts, text: `tv dump (${r.count ?? "?"} entries) by ${who(r)}` });
+  }
+
+  const sweep = (kind, pick, over, describe) => {
+    let quietUntil = -Infinity;
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i];
+      if (!pick(r) || r.t < quietUntil) continue;
+      const inWindow = rs.filter((x) => pick(x) && x.t <= r.t && x.t > r.t - winMs);
+      const names = new Set(inWindow.flatMap((x) => x.entries || []));
+      if (!over(names, inWindow)) continue;
+      quietUntil = r.t + winMs;
+      if (r.t <= sinceMs) continue;
+      findings.push({ kind, ts: r.ts, text: describe(names, inWindow, r) });
+    }
+  };
+
+  sweep(
+    "burst",
+    (r) => r.cmd === "get" && r.found !== false,
+    (names) => names.size > maxDistinct,
+    (names, win, r) =>
+      `${names.size} distinct entries read within ${windowSec}s (${[...names].slice(0, 12).join(", ")}) by ${[...new Set(win.map(who))].join(" | ")}`
+  );
+  sweep(
+    "misses",
+    (r) => r.cmd === "get" && r.found === false,
+    (_names, win) => win.length >= maxMisses,
+    (names, win) =>
+      `${win.length} reads of missing entries within ${windowSec}s (${[...names].slice(0, 12).join(", ")}) by ${[...new Set(win.map(who))].join(" | ")}`
+  );
+
+  return findings.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+}
+
+function wirePost(channel, text) {
+  const wire = process.env.TOKENVAULT_WIRE || "wire";
+  const env = { ...process.env, WIRE_AGENT: process.env.WIRE_AGENT || "tokenvault-audit" };
+  const post = () =>
+    execFileSync(wire, ["post", channel, text], { env, stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+  try {
+    post();
+  } catch {
+    // the channel may not exist yet on a fresh store
+    execFileSync(wire, ["new", channel], { env, stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+    post();
+  }
+}
+
+// ── Git helpers ─────────────────────────────────────────────────────
 
 function git(...args) {
   return execFileSync("git", args, { cwd: DATA_DIR, stdio: "pipe" })
@@ -286,14 +456,19 @@ function cmdGet(args) {
   const [project, ...rest] = args;
   const descFilter = rest.length ? rest.join(" ") : null;
   const data = load();
-  if (!data[project]) die(`No tokens for ${ce.yellow(project)}`);
+  if (!data[project]) {
+    audit("get", { entries: [entryName(project, descFilter)], found: false });
+    die(`No tokens for ${ce.yellow(project)}`);
+  }
   const entries = data[project];
   if (descFilter) {
     const match = entries.find((e) => (e.desc || "") === descFilter);
+    audit("get", { entries: [entryName(project, descFilter)], found: !!match });
     if (!match) die(`No token ${ce.yellow(descFilter)} in ${ce.yellow(project)}`);
     console.log(match.token);
     return;
   }
+  audit("get", { entries: entries.map((e) => entryName(project, e.desc)), found: true });
   if (entries.length === 1) {
     console.log(entries[0].token);
   } else {
@@ -357,6 +532,10 @@ function cmdRemove(args) {
 
 function cmdDump() {
   const data = load();
+  audit("dump", {
+    entries: [],
+    count: Object.values(data).reduce((n, list) => n + list.length, 0),
+  });
   if (!Object.keys(data).length) {
     console.log(c.dim("No tokens stored."));
     return;
@@ -425,6 +604,61 @@ function cmdPull() {
   }
 }
 
+function cmdAudit(args) {
+  const flag = (name, dflt) => {
+    const i = args.indexOf(name);
+    return i === -1 ? dflt : args[i + 1];
+  };
+  if (args[0] !== "check") {
+    const n = Number(flag("-n", 20));
+    for (const r of readAudit().slice(-n))
+      console.log(`${c.dim(r.ts)} ${c.cyan(r.cmd)} ${r.cmd === "dump" ? `(${r.count})` : (r.entries || []).join(", ")}${r.found === false ? c.yellow(" (missing)") : ""} ${c.dim(who(r))}`);
+    return;
+  }
+
+  const post = args.includes("--post");
+  const channel = flag("--channel", process.env.TOKENVAULT_AUDIT_CHANNEL || "tokenvault-audit");
+  let state = {};
+  if (post) {
+    try {
+      state = JSON.parse(fs.readFileSync(AUDIT_STATE, "utf8"));
+    } catch {}
+  }
+  const records = readAudit();
+  const findings = findAnomalies(records, {
+    since: post ? state.lastTs || null : null,
+    windowSec: Number(flag("--window", 60)),
+    maxDistinct: Number(flag("--max", 5)),
+    maxMisses: Number(flag("--max-misses", 3)),
+  });
+  const lastTs = records.reduce((m, r) => (r.ts && (!m || r.ts > m) ? r.ts : m), state.lastTs || null);
+
+  for (const f of findings) console.log(`${f.ts} ${f.kind}: ${f.text}`);
+  if (!findings.length) console.log(c.dim("No anomalies."));
+
+  if (post) {
+    if (findings.length) {
+      const text = [`tokenvault audit on ${os.hostname()}: ${findings.length} anomal${findings.length === 1 ? "y" : "ies"}`]
+        .concat(findings.slice(0, 20).map((f) => `- ${f.ts} ${f.kind}: ${f.text}`))
+        .join("\n");
+      try {
+        wirePost(channel, text);
+      } catch (err) {
+        // leave the cursor where it was so the next run tries again
+        die(`wire post to ${channel} failed: ${err.message}`);
+      }
+    }
+    try {
+      fs.mkdirSync(path.dirname(AUDIT_STATE), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(AUDIT_STATE, JSON.stringify({ lastTs }), { mode: 0o600 });
+    } catch (err) {
+      die(`could not save ${AUDIT_STATE}: ${err.message}`);
+    }
+  }
+  // exit 3 flags findings for a human run; a --post run that delivered them succeeded
+  process.exitCode = findings.length && !post ? 3 : 0;
+}
+
 function cmdKeyPath() {
   console.log(KEY_FILE);
 }
@@ -454,8 +688,12 @@ ${c.bold("Sync")}
 ${c.bold("Info")}
   ${c.cyan("tv key-path")}                      Print master key location
 
+${c.bold("Audit")}
+  ${c.cyan("tv audit")} [-n 20]                   Recent gets/dumps (names, never values)
+  ${c.cyan("tv audit check")} [--post]            Flag dumps, bursts, probing; --post sends to wire
+
 ${c.dim("Aliases: ls=list, rm=remove")}
-${c.dim("Data: ~/.tokenvault/ | Key: ~/.config/tokenvault/master.key")}`;
+${c.dim("Data: ~/.tokenvault/ | Key: ~/.config/tokenvault/master.key | Audit: ~/.local/state/tokenvault/audit.log")}`;
 
 // ── Main ────────────────────────────────────────────────────────────
 
@@ -475,7 +713,10 @@ const cli = router({
     push: cmdPush,
     pull: cmdPull,
     "key-path": cmdKeyPath,
+    audit: cmdAudit,
   },
 });
 
-cli.run(process.argv.slice(2));
+if (require.main === module) cli.run(process.argv.slice(2));
+
+module.exports = { findAnomalies, auditRecord, readAudit };
