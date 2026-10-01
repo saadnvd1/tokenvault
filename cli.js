@@ -431,11 +431,22 @@ function cmdInit() {
   console.log(`  ${c.dim("Copy this file to other machines at the same path.")}`);
 }
 
+function looksLikeSecret(desc) {
+  if (!desc) return false;
+  if (/-----BEGIN [A-Z ]+-----/.test(desc) || desc.includes("\n")) return true;
+  // One long unbroken run of key-ish characters, e.g. a hex key or an API token.
+  return desc.length >= 24 && !/\s/.test(desc) && /^[A-Za-z0-9+\/=_.:-]+$/.test(desc);
+}
+
 function cmdAdd(args) {
   if (args.length < 2)
     die(`Usage: tv add ${ce.yellow("<project> <token>")} [description]`);
   const [project, token, ...rest] = args;
   const desc = rest.join(" ");
+  // The description is printed in clear by `tv list`. A secret passed there by
+  // swapping the arguments would be shown on screen and in agent transcripts.
+  if (looksLikeSecret(desc))
+    die(`Refusing: the description looks like a secret. Usage: tv add ${ce.yellow("<project> <token>")} [description]`);
   const data = load();
   if (!data[project]) data[project] = [];
   const existing = data[project].find((e) => (e.desc || "") === desc);

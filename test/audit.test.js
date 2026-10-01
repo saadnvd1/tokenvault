@@ -182,3 +182,15 @@ test("a failed wire post keeps the cursor so the next run retries", () => {
   assert.strictEqual(r.status, 1);
   assert.ok(!fs.existsSync(env.TOKENVAULT_AUDIT_LOG + ".state.json"));
 });
+
+test("tv add refuses a description that looks like a secret (swapped arguments)", () => {
+  const { tv } = sandbox();
+  const pem = "-----BEGIN EC PRIVATE KEY-----\nabc\n-----END EC PRIVATE KEY-----";
+  for (const desc of [pem, "6a206473f94348ebd479f0a039a62e9d"]) {
+    const r = tv(["add", "proj", "origin key example.app", desc]);
+    assert.notStrictEqual(r.status, 0);
+    assert.match(r.stderr + r.stdout, /looks like a secret/);
+  }
+  const ok = tv(["add", "proj", "sk-live-123", "origin key example.app (CF Origin CA, 15y)"]);
+  assert.strictEqual(ok.status, 0, ok.stderr);
+});
