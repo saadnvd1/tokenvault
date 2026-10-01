@@ -443,9 +443,10 @@ function cmdAdd(args) {
     die(`Usage: tv add ${ce.yellow("<project> <token>")} [description]`);
   const [project, token, ...rest] = args;
   const desc = rest.join(" ");
+  // TV_ALLOW_SECRET_DESC=1 exists only so tests can seed legacy entries.
   // The description is printed in clear by `tv list`. A secret passed there by
   // swapping the arguments would be shown on screen and in agent transcripts.
-  if (looksLikeSecret(desc))
+  if (looksLikeSecret(desc) && !process.env.TV_ALLOW_SECRET_DESC)
     die(`Refusing: the description looks like a secret. Usage: tv add ${ce.yellow("<project> <token>")} [description]`);
   const data = load();
   if (!data[project]) data[project] = [];

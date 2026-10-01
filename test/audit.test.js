@@ -73,8 +73,9 @@ test("a secret-shaped description is logged as a hash, not as written", () => {
   const { tv, log } = sandbox();
   const keyDesc = "-----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC1rZXktdjEAAAAABG5vbmU";
   const tokenDesc = "ghp_abcdefghijklmnopqrstuvwxyz0123";
-  tv(["add", "github", SECRET, keyDesc]);
-  tv(["add", "github", "other", tokenDesc]);
+  const legacy = { TV_ALLOW_SECRET_DESC: "1" }; // entries written before the guard existed
+  tv(["add", "github", SECRET, keyDesc], legacy);
+  tv(["add", "github", "other", tokenDesc], legacy);
   tv(["get", "github"]);
   tv(["get", "github", tokenDesc]);
   const raw = log();
